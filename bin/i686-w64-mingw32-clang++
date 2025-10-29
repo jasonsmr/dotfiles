@@ -1,0 +1,27 @@
+#!/data/data/com.termux/files/usr/bin/env bash
+set -euo pipefail
+TOOLROOT="$HOME/opt/mingw"
+TRIP64="x86_64-w64-mingw32"
+TRIP32="i686-w64-mingw32"
+SYSROOT="$TOOLROOT/$TRIP64"
+CLANGC="$HOME/bin/i686-w64-mingw32-clang"
+
+is_link=1
+for a in "$@"; do case "$a" in -c|-S|-E) is_link=0;; esac; done
+
+CXXINC_BASE="$SYSROOT/include/c++"
+CXXVER="$(ls -1 "$CXXINC_BASE" 2>/dev/null | head -n1 || true)"
+INCS=()
+if [ -n "${CXXVER:-}" ] && [ -d "$CXXINC_BASE/$CXXVER" ]; then
+  INCS+=(-isystem "$CXXINC_BASE/$CXXVER")
+  if [ -d "$CXXINC_BASE/$CXXVER/$TRIP32" ]; then
+    INCS+=(-isystem "$CXXINC_BASE/$CXXVER/$TRIP32")
+  fi
+fi
+
+args=(-x c++ -std=gnu++17 -stdlib=libstdc++ "${INCS[@]}")
+if (( is_link )); then
+  args+=(-lstdc++)
+fi
+
+exec "$CLANGC" "${args[@]}" "$@"

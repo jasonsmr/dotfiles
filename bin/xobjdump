@@ -1,0 +1,9 @@
+#!/usr/bin/env sh
+# Run MinGW objdump but make sure Termux host libs (libzstd.so.1) are visible.
+TERMUX_LIB="/data/data/com.termux/files/usr/lib"
+if [ -n "$LD_LIBRARY_PATH" ]; then
+  export LD_LIBRARY_PATH="$TERMUX_LIB:$LD_LIBRARY_PATH"
+else
+  export LD_LIBRARY_PATH="$TERMUX_LIB"
+fi
+exec x86_64-w64-mingw32-objdump "$@"

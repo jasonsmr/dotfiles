@@ -1,0 +1,44 @@
+#!/data/data/com.termux/files/usr/bin/bash
+# ---- toolchain/termux prelude ----
+if [ -z "$__TOOLCHAIN_PRELUDE" ]; then
+  __TOOLCHAIN_PRELUDE=1
+  : ${TMP:="$HOME$TMP"}; mkdir -p -- "$TMP"
+  # minimal PATH glue (keep short, user can extend in ~/.zshrc)
+  if [ -d "$HOME/opt/toolchain/aarch64-linux-android/bin" ]; then
+    case ":$PATH:" in *":$HOME/opt/toolchain/aarch64-linux-android/bin:"*) ;; 
+      *) PATH="$HOME/opt/toolchain/aarch64-linux-android/bin:$PATH";;
+    esac
+  fi
+fi
+# ---- end prelude ----
+
+
+here="$(dirname "$0")"
+GUI="$HOME/termux-gui.sh"
+
+msg(){ printf "[clion-start] %s\n" "$*"; }
+
+# 1) make sure GUI/X11 is running (unless user asked not to)
+if [ "${1-}" != "--no-gui" ]; then
+  if ! pgrep -f "termux.x11" >/dev/null 2>&1 || [ -z "${DISPLAY-}" ]; then
+    msg "starting Termux GUI..."
+    "$GUI" start >/dev/null || { echo "[err] failed to start GUI"; exit 1; }
+    # give DISPLAY a moment to appear
+    sleep 1
+  fi
+else
+  shift
+fi
+
+# 2) env preflight
+"$here/check-fizban-env.sh"
+
+# 3) enforce plugin disables (radler/rider/cwm)
+if command -v fix_clion_plugins.sh >/dev/null 2>&1; then
+  fix_clion_plugins.sh
+elif [ -x "$here/fix_clion_plugins.sh" ]; then
+  "$here/fix_clion_plugins.sh"
+fi
+
+# 4) launch CLion via our Termux-aware shim
+exec "$here/clion-termux" "$@"

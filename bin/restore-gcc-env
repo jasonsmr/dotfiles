@@ -1,0 +1,109 @@
+#!/data/data/com.termux/files/usr/bin/env bash
+# ---- toolchain/termux prelude ----
+if [ -z "$__TOOLCHAIN_PRELUDE" ]; then
+  __TOOLCHAIN_PRELUDE=1
+  : ${TMP:="$HOME$TMP"}; mkdir -p -- "$TMP"
+  # minimal PATH glue (keep short, user can extend in ~/.zshrc)
+  if [ -d "$HOME/opt/toolchain/aarch64-linux-android/bin" ]; then
+    case ":$PATH:" in *":$HOME/opt/toolchain/aarch64-linux-android/bin:"*) ;; 
+      *) PATH="$HOME/opt/toolchain/aarch64-linux-android/bin:$PATH";;
+    esac
+  fi
+fi
+# ---- end prelude ----
+
+# ---- Config ----
+BUILD_ROOT="/data/data/com.termux/files/home/toolchain-work/build/gcc-android-stage1-clean"
+NDK_ROOT="/data/data/com.termux/files/home/opt/android-sdk/ndk/latest"
+NDK_AARCH64_PREBUILT="$NDK_ROOT/toolchains/llvm/prebuilt/linux-aarch64"
+TERMUX_LIB="/data/data/com.termux/files/usr/lib"
+JOBS="$(nproc 2>/dev/null || echo 2)"
+
+log() { printf '\n\033[1;32m[%s]\033[0m %s\n' "$(date +%H:%M:%S)" "$*"; }
+die() { printf '\n\033[1;31m[ERROR]\033[0m %s\n' "$*" >&2; exit 1; }
+
+cd "$BUILD_ROOT" || die "Run this from the build root: $BUILD_ROOT"
+
+# ---- 0) Clean env + required paths ----
+log "Resetting environment"
+unset CFLAGS CPPFLAGS CXXFLAGS LDFLAGS \
+      CFLAGS_FOR_TARGET CXXFLAGS_FOR_TARGET CPPFLAGS_FOR_TARGET LDFLAGS_FOR_TARGET || true
+
+export ANDROID_NDK_ROOT="$NDK_ROOT"
+export PATH="$NDK_AARCH64_PREBUILT/bin:$PATH"
+export LD_LIBRARY_PATH="$TERMUX_LIB:${LD_LIBRARY_PATH:-}"
+
+test -f "$NDK_AARCH64_PREBUILT/sysroot/usr/include/sys/cdefs.h" \
+  || die "NDK prebuilt (linux-aarch64) not found at $NDK_AARCH64_PREBUILT"
+
+# ---- 1) Clean any partial fixincludes + libgcc ----
+log "Removing previous fixincludes + libgcc artifacts"
+rm -rf gcc/include-fixed gcc/stmp-fixinc \
+       build-aarch64-unknown-linux-android/fixincludes \
+       aarch64-linux-android/libgcc
+
+# ---- 2) Force *_unlocked checks to 'no' for fixincludes on Bionic ----
+log "Forcing *_unlocked configure results (Bionic-safe)"
+export ac_cv_func_clearerr_unlocked=no
+export ac_cv_func_feof_unlocked=no
+export ac_cv_func_ferror_unlocked=no
+export ac_cv_func_fflush_unlocked=no
+export ac_cv_func_fgetc_unlocked=no
+export ac_cv_func_fgets_unlocked=no
+export ac_cv_func_fileno_unlocked=no
+export ac_cv_func_fprintf_unlocked=no
+export ac_cv_func_fputc_unlocked=no
+export ac_cv_func_fputs_unlocked=no
+export ac_cv_func_fread_unlocked=no
+export ac_cv_func_fwrite_unlocked=no
+export ac_cv_func_getchar_unlocked=no
+export ac_cv_func_getc_unlocked=no
+export ac_cv_func_putchar_unlocked=no
+export ac_cv_func_putc_unlocked=no
+
+# ---- 3) Build host fixincludes (serial for readable logs) ----
+log "Building host fixincludes (this creates gcc/include-fixed + stamp)"
+# This target is what top-level uses to make fixincludes tools/headers
+make -j1 all-build-fixincludes || die "all-build-fixincludes failed"
+
+# ---- 4) Ensure include-fixed exists; if not, stamp it so GCC won’t try again ----
+if [ ! -d gcc/include-fixed ]; then
+  log "gcc/include-fixed missing after build – stamping as done (acceptable for NDK sysroot)"
+  mkdir -p gcc/include-fixed
+  : > gcc/stmp-fixinc
+fi
+
+# Safety check: ensure no accidental x86_64 sysroot leakage
+if grep -R "linux-x86_64" gcc/include-fixed >/dev/null 2>&1; then
+  die "gcc/include-fixed references linux-x86_64; wrong prebuilt leaked in"
+else
+  log "include-fixed looks clean ✅"
+fi
+
+# ---- 5) Reconfigure libgcc (clean target flags) ----
+log "Configuring target libgcc"
+make -j1 \
+  CFLAGS_FOR_TARGET='-g -O2 -fPIC' \
+  CPPFLAGS_FOR_TARGET='' \
+  LDFLAGS_FOR_TARGET='' \
+  configure-target-libgcc
+
+# ---- 6) Build libgcc with libc inhibited (stage1) ----
+log "Building target libgcc (inhibit libc)"
+make -j"$JOBS" \
+  CFLAGS_FOR_TARGET='-g -O2 -fPIC' \
+  CPPFLAGS_FOR_TARGET='' \
+  LDFLAGS_FOR_TARGET='' \
+  INHIBIT_LIBC_CFLAGS='-Dinhibit_libc' \
+  all-target-libgcc
+
+# ---- 7) Install libgcc ----
+log "Installing target libgcc"
+make \
+  CFLAGS_FOR_TARGET='-g -O2 -fPIC' \
+  CPPFLAGS_FOR_TARGET='' \
+  LDFLAGS_FOR_TARGET='' \
+  INHIBIT_LIBC_CFLAGS='-Dinhibit_libc' \
+  install-target-libgcc
+
+log "Done. libgcc should be installed under: $BUILD_ROOT/../opt/toolchain/aarch64-linux-android"

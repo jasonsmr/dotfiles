@@ -1,0 +1,7 @@
+#!/data/data/com.termux/files/usr/bin/bash
+# zsh-safe, no set -e; minimal logic
+: "${ANDROID_HOME:=$HOME/opt/android-sdk}"
+BT="$ANDROID_HOME/build-tools"
+# Pick newest build-tools that has an executable aapt2
+AAPT2=$BT/34.0.4/aapt2
+exec "$AAPT2" "$@"

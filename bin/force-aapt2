@@ -1,0 +1,21 @@
+#!/data/data/com.termux/files/usr/bin/sh
+REAL=/data/data/com.termux/files/home/opt/android-sdk/build-tools/34.0.4/aapt2
+LOG=$HOME/aapt2-invocations.log
+while :; do
+  find "$HOME/.gradle/caches" -type f -name aapt2 -path '*/transformed/aapt2-*-linux/*' 2>/dev/null | while read -r p; do
+    # Only replace if not already our wrapper
+    if [ "$(head -c2 "$p" 2>/dev/null)" != '#!' ]; then
+      # write a fresh wrapper that uses /system/bin/sh and logs args
+      cat > "$p" <<'WRAP'
+#!/system/bin/sh
+# Log argv for debugging (one line per call)
+{ printf '%s' "$(date -Is)  -- "; i=0; for a in "$@"; do i=$((i+1)); printf '[%d]=' "$i"; printf '%s ' "$a"; done; printf '\n'; } >> /data/data/com.termux/files/home/aapt2-invocations.log 2>/dev/null
+# Exec the real arm64 aapt2
+exec /data/data/com.termux/files/home/opt/android-sdk/build-tools/34.0.4/aapt2 "$@"
+WRAP
+      chmod 0755 "$p"
+      echo "wrapped: $p"
+    fi
+  done
+  sleep 0.2
+done

@@ -1,0 +1,31 @@
+#!/data/data/com.termux/files/usr/bin/env bash
+set -euo pipefail
+TOOLROOT="$HOME/opt/mingw"
+TRIP64="x86_64-w64-mingw32"
+TRIP32="i686-w64-mingw32"
+SYSROOT="$TOOLROOT/$TRIP64"
+CLANG="/data/data/com.termux/files/usr/bin/clang"
+GCCLIB64="$(ls -d "$TOOLROOT/lib/gcc/$TRIP64"/* 2>/dev/null | sort -V | tail -n1 || true)"
+GCCLIB32="${GCCLIB64:+$GCCLIB64/32}"
+
+is_link=1
+for a in "$@"; do
+  case "$a" in -c|-S|-E) is_link=0;; esac
+done
+
+args=(
+  --target="$TRIP32" --sysroot="$SYSROOT" -B"$SYSROOT/bin"
+  -fuse-ld=lld -rtlib=libgcc -isystem "$SYSROOT/include"
+)
+if [[ -n "${GCCLIB32:-}" ]]; then args+=(-L"$GCCLIB32" -Wl,-L,"$GCCLIB32"); fi
+args+=(-L"$SYSROOT/lib32" -Wl,-L,"$SYSROOT/lib32")
+
+if (( is_link )); then
+  args+=(
+    -Wl,--enable-auto-import -Wl,--dynamicbase -Wl,--nxcompat
+    -L"$SYSROOT/lib32/compat" -Wl,-L,"$SYSROOT/lib32/compat"
+    -Wl,--whole-archive -lcompat32 -Wl,--no-whole-archive
+  )
+fi
+
+exec "$CLANG" "${args[@]}" "$@"

@@ -1,0 +1,73 @@
+#!/data/data/com.termux/files/usr/bin/bash
+# ---- toolchain/termux prelude ----
+if [ -z "$__TOOLCHAIN_PRELUDE" ]; then
+  __TOOLCHAIN_PRELUDE=1
+  : ${TMP:="$HOME$TMP"}; mkdir -p -- "$TMP"
+  # minimal PATH glue (keep short, user can extend in ~/.zshrc)
+  if [ -d "$HOME/opt/toolchain/aarch64-linux-android/bin" ]; then
+    case ":$PATH:" in *":$HOME/opt/toolchain/aarch64-linux-android/bin:"*) ;; 
+      *) PATH="$HOME/opt/toolchain/aarch64-linux-android/bin:$PATH";;
+    esac
+  fi
+fi
+# ---- end prelude ----
+
+# clion-termux — run CLion on Termux/bionic using Termux OpenJDK, pinned JNA.
+
+
+IDE_DIR="${IDE_DIR:-$HOME/opt/jetbrains/clion-2025.1.3}"
+
+# Use Termux JDK (works on bionic)
+export CLION_JDK="$PREFIX/lib/jvm/java-21-openjdk"
+export JAVA_HOME="$CLION_JDK"
+export JDK_HOME="$CLION_JDK"
+export PATH="$CLION_JDK/bin:$PATH"
+
+# Point CLion at its OWN JNA (7.0.0) and ignore system/native copies
+JNA_DIR="$IDE_DIR/lib/jna/aarch64"
+export JNA_NOSYS=1
+# Avoid any external JNA in LD_LIBRARY_PATH from taking precedence
+if [ -n "${LD_LIBRARY_PATH-}" ]; then
+  OLD_LD="$LD_LIBRARY_PATH"
+  # drop any segment ending with /native-libs/jna
+  LD_LIBRARY_PATH="$(printf '%s' "$LD_LIBRARY_PATH" | awk -v RS=: -v ORS=: '$0 !~ /native-libs\/jna$/ {print}' | sed 's/:$//')"
+  export LD_LIBRARY_PATH
+fi
+
+# X/DBus quirks
+: "${TMP:=/data/data/com.termux/files/home$HOME$TMP}"
+export DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=$TMP/dbus/session-bus}"
+export _JAVA_AWT_WM_NONREPARENTING=1
+export AWT_TOOLKIT=MToolkit
+export LIBGL_ALWAYS_SOFTWARE=1
+export NO_AT_BRIDGE=1
+
+# Optional: shim JBR java to Termux java (keeps JetBrains scripts happy)
+mkdir -p "$IDE_DIR/jbr/bin"
+cat > "$IDE_DIR/jbr/bin/java" <<'SH'
+#!/data/data/com.termux/files/usr/bin/bash
+exec /data/data/com.termux/files/usr/lib/jvm/java-21-openjdk/bin/java "$@"
+SH
+chmod +x "$IDE_DIR/jbr/bin/java"
+
+EXTRA_VM_OPTS=(
+  "-Djna.nosys=true"
+  "-Djna.boot.library.path=$JNA_DIR"
+  "-Djna.library.path=$JNA_DIR"
+  "-Dide.browser.jcef.enabled=false"
+  "-Didea.filewatcher.disabled=true"
+  "-Dsun.java2d.xrender=true"
+  "-Dsun.java2d.opengl=false"
+)
+
+EXTRA_VM_OPTS+=(
+  "-Dide.native.mem.trim=false"
+)
+
+echo "[clion-termux] JDK=$CLION_JDK  JNA_DIR=$JNA_DIR  LD_LIBRARY_PATH=${LD_LIBRARY_PATH-<unset>}"
+# X must be running
+if [ -z "${DISPLAY-}" ]; then
+  echo "[clion-termux] DISPLAY is empty. Start GUI:  ~/termux-gui.sh start" >&2
+  exit 1
+fi
+exec "$IDE_DIR/bin/clion.sh" "${EXTRA_VM_OPTS[@]}" "$@"

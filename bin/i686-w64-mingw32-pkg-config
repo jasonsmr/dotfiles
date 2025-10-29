@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+export PKG_CONFIG_DIR=
+export PKG_CONFIG_PATH="$HOME/opt/mingw32/lib/pkgconfig"
+export PKG_CONFIG_LIBDIR="$HOME/opt/mingw32/lib/pkgconfig"
+unset PKG_CONFIG_SYSROOT_DIR
+exec pkg-config "$@"

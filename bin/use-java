@@ -1,0 +1,21 @@
+#!/data/data/com.termux/files/usr/bin/sh
+set -e
+case "$1" in
+  17) J=/data/data/com.termux/files/usr/lib/jvm/java-17-openjdk ;;
+  21) J=/data/data/com.termux/files/usr/lib/jvm/java-21-openjdk ;;
+  *)
+    echo "usage: use-java {17|21}"
+    exit 1
+    ;;
+esac
+
+# Update/insert JAVA_HOME + prepend its bin to PATH for this shell
+export JAVA_HOME="$J"
+case ":$PATH:" in
+  *":$JAVA_HOME/bin:"*) ;; # already there
+  *) export PATH="$JAVA_HOME/bin:$PATH" ;;
+esac
+
+# Print what we’re using
+echo "JAVA_HOME=$JAVA_HOME"
+java -version

@@ -1,0 +1,24 @@
+#!/data/data/com.termux/files/usr/bin/bash
+# ---- toolchain/termux prelude ----
+if [ -z "$__TOOLCHAIN_PRELUDE" ]; then
+  __TOOLCHAIN_PRELUDE=1
+  : ${TMP:="$HOME$TMP"}; mkdir -p -- "$TMP"
+  # minimal PATH glue (keep short, user can extend in ~/.zshrc)
+  if [ -d "$HOME/opt/toolchain/aarch64-linux-android/bin" ]; then
+    case ":$PATH:" in *":$HOME/opt/toolchain/aarch64-linux-android/bin:"*) ;; 
+      *) PATH="$HOME/opt/toolchain/aarch64-linux-android/bin:$PATH";;
+    esac
+  fi
+fi
+# ---- end prelude ----
+
+REAL_LN="/data/data/com.termux/files/usr/bin/ln"
+if "$REAL_LN" "$@" 2>/dev/null; then exit 0; fi
+if [[ "$*" != *"-s"* ]]; then
+  if "$REAL_LN" -s "$@" 2>/dev/null; then
+    echo "ln (shim): replaced hardlink with symlink" >&2; exit 0
+  fi
+fi
+src="${@: -2:1}"; dst="${@: -1}"
+cp -a "$src" "$dst"
+echo "ln (shim): copied $src -> $dst" >&2
