@@ -1,116 +1,76 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Where your built box64 ELF lives (override with: BOX64_SRC=/path/to/box64)
 : "${BOX64_SRC:=$HOME/opt/box64/bin/box64}"
-
-# Toggle: force a file:// URL in the manifest even if GH_PUBLISH=1
-: "${FORCE_FILE_URL:=0}"
 
 ROOT="${PWD}"
 OUTDIR="${ROOT}/out/runtime"
 STAGE="${ROOT}/scripts/runtime/runtime_staging"
-MANIFEST_SRC="${ROOT}/scripts/runtime/runtime-manifest.json"   # embedded into APK
-MANIFEST_DST="${OUTDIR}/runtime-manifest.json"                 # for CI/inspection
+MANIFEST="${ROOT}/scripts/runtime/runtime-manifest.json"
+
 STAMP="$(date +%Y%m%d-%H%M%S)-$(git rev-parse --short=12 HEAD || echo manual)"
 ZIP="${OUTDIR}/runtime-${STAMP}.zip"
-SHA="${ZIP}.sha256"
 
-# Clean staging to prevent lingering stubs
-rm -rf "${STAGE}"
-mkdir -p "${OUTDIR}" "${STAGE}/bin"
+GH_REPO="${GH_REPO:-jasonsmr/RobotForest}"
+GH_TAG="${GH_TAG:-rf-runtime}"
+LATEST_ASSET="runtime-latest.zip"                  # optional convenience
+VER_ASSET="runtime-${STAMP}.zip"                   # cache-busting, used by manifest
 
-# --- Sanity on source ELF
-if [[ ! -f "${BOX64_SRC}" ]]; then
-  echo "ERROR: BOX64_SRC not found: ${BOX64_SRC}" >&2
-  exit 1
-fi
-if ! head -c 4 "${BOX64_SRC}" | hexdump -C | grep -q '7f 45 4c 46'; then
-  echo "ERROR: ${BOX64_SRC} is not an ELF (missing 0x7F 'ELF' magic)" >&2
-  file "${BOX64_SRC}" || true
-  exit 1
-fi
-BYTES_SRC=$(stat -c%s "${BOX64_SRC}")
-if (( BYTES_SRC < 1000000 )); then
-  echo "ERROR: ${BOX64_SRC} too small (${BYTES_SRC} bytes) — expected a real build" >&2
-  exit 1
-fi
+# Sanity
+[[ -f "$BOX64_SRC" ]] || { echo "ERROR: BOX64_SRC missing: $BOX64_SRC" >&2; exit 1; }
+head -c 4 "$BOX64_SRC" | od -An -tx1 | tr -d ' \n' | grep -q '^7f454c46$' \
+  || { echo "ERROR: not an ELF: $BOX64_SRC" >&2; exit 1; }
+BYTES_SRC=$(stat -c%s "$BOX64_SRC"); echo "[stage] source size: $BYTES_SRC"
+(( BYTES_SRC >= 1000000 )) || { echo "ERROR: source too small" >&2; exit 1; }
 
-# --- Stage payload (exact path: bin/box64)
-install -m 0755 "${BOX64_SRC}" "${STAGE}/bin/box64"
+# Stage as bin/… (NOT runtime/bin)
+rm -rf "$STAGE"; mkdir -p "$OUTDIR" "$STAGE/bin"
+install -m 0755 "$BOX64_SRC" "$STAGE/bin/box64"
 
-# Extra guard: confirm staged file size
-BYTES_STAGE=$(stat -c%s "${STAGE}/bin/box64")
-echo "[stage] bin/box64 size: ${BYTES_STAGE} bytes"
-if (( BYTES_STAGE < 1000000 )); then
-  echo "ERROR: staged box64 too small (${BYTES_STAGE} bytes)" >&2
-  exit 1
-fi
+# Make zip with explicit bin/ directory entry
+(
+  cd "$STAGE"
+  zip -9 -X -r "$ZIP" bin/ >/dev/null
+)
+zip -T "$ZIP" >/dev/null || { echo "ERROR: zip test failed"; exit 1; }
 
-# --- Create ZIP (ensure 'bin/...' root)
-( cd "${STAGE}" && zip -9 -X -r "${ZIP}" bin >/dev/null )
+echo "[zip] $ZIP"
+unzip -l "$ZIP" | sed -n '1,12p'
+unzip -p "$ZIP" bin/box64 | head -c 4 | od -An -tx1 | tr -d ' \n' | grep -q '^7f454c46$'
+BYTES_ENTRY="$(unzip -p "$ZIP" bin/box64 | wc -c | tr -d ' ')"
+echo "[zip] entry bytes: $BYTES_ENTRY"
+(( BYTES_ENTRY >= 1000000 )) || { echo "ERROR: zipped entry too small"; exit 1; }
 
-# --- Verify ZIP contents
-echo "[runtime] staging: ${STAGE}"
-echo "[runtime] out zip: ${ZIP}"
-echo "[runtime] zip listing:"
-zipinfo -1 "${ZIP}" | sed 's/^/  /'
+SHA256="$(sha256sum "$ZIP" | awk '{print $1}')"
+echo "[zip] sha256: $SHA256"
 
-# Check the entry exists and is ELF
-if ! unzip -p "${ZIP}" bin/box64 | head -c 4 | hexdump -C | grep -q '7f 45 4c 46'; then
-  echo "ERROR: ZIP does not contain a valid ELF at bin/box64" >&2
-  exit 1
-fi
-BYTES_ZIP_ENTRY=$(unzip -p "${ZIP}" bin/box64 | wc -c | tr -d ' ')
-echo "[runtime] zipped bin/box64 size: ${BYTES_ZIP_ENTRY} bytes"
-if (( BYTES_ZIP_ENTRY < 1000000 )); then
-  echo "ERROR: zipped box64 too small (${BYTES_ZIP_ENTRY} bytes)" >&2
-  exit 1
-fi
+# Ensure release exists
+gh release view "$GH_TAG" -R "$GH_REPO" >/dev/null 2>&1 || \
+  gh release create "$GH_TAG" -R "$GH_REPO" -t "RobotForest runtime" -n "Auto runtime payloads"
 
-# --- Hash + size
-SHA256="$(sha256sum "${ZIP}" | awk '{print $1}')"
-echo "${SHA256}  $(basename "${ZIP}")" > "${SHA}"
-ZIP_BYTES=$(stat -c%s "${ZIP}")
-echo "[runtime] sha256: ${SHA256}"
+# Upload versioned asset (the one the manifest will point at)
+cp -f "$ZIP" "$HOME/tmp/$VER_ASSET"
+gh release upload "$GH_TAG" "$HOME/tmp/$VER_ASSET" -R "$GH_REPO" --clobber >/dev/null
+VER_URL="https://github.com/${GH_REPO}/releases/download/${GH_TAG}/${VER_ASSET}"
 
-# --- Optionally publish
-PUB_URL=""
-if [[ "${GH_PUBLISH:-}" == "1" && "${FORCE_FILE_URL}" != "1" ]]; then
-  if gh repo view --json nameWithOwner >/dev/null 2>&1; then
-    NWO="$(gh repo view --json nameWithOwner -q .nameWithOwner)"
-  else
-    NWO="jasonsmr/RobotForest"
-  fi
-  gh release upload auto "${ZIP}" --clobber >/dev/null
-  gh release upload auto "${SHA}" --clobber >/dev/null || true
-  PUB_URL="https://github.com/${NWO}/releases/download/auto/$(basename "${ZIP}")"
-  echo "[runtime] published: ${PUB_URL}"
-fi
+# Optional: also maintain a stable alias (may be cached by CDN)
+cp -f "$ZIP" "$HOME/tmp/$LATEST_ASSET"
+gh release delete-asset "$GH_TAG" "$LATEST_ASSET" -R "$GH_REPO" >/dev/null 2>&1 || true
+gh release upload "$GH_TAG" "$HOME/tmp/$LATEST_ASSET" -R "$GH_REPO" --clobber >/dev/null
 
-# --- Write manifest (always rewrite)
-UPDATED_AT="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
-URL="${PUB_URL:-file://${ZIP}}"
+# Verify the versioned URL (avoid CDN stale)
+DL="$HOME/tmp/runtime-${STAMP}.verify.zip"
+curl -fL --retry 3 -o "$DL" "$VER_URL"
+head -c 4 "$DL" | od -An -tx1 | tr -d ' \n' | grep -q '^504b0304$' || { file "$DL"; echo "remote not a ZIP"; exit 1; }
+unzip -p "$DL" bin/box64 | head -c 4 | od -An -tx1 | tr -d ' \n' | grep -q '^7f454c46$' || { echo "remote lacks ELF entry"; exit 1; }
 
-cat > "${MANIFEST_SRC}" <<JSON
+# Manifest points at the VERSIONED asset; subdir=runtime (final path: app_runtime/runtime/bin/box64)
+cat > "$MANIFEST" <<JSON
 {
-  "schema": 1,
-  "updated_at": "${UPDATED_AT}",
-  "version": "${STAMP}",
-  "zip": {
-    "url": "${URL}",
-    "sha256": "${SHA256}",
-    "bytes": ${ZIP_BYTES}
-  },
-  "bin_path": "bin/box64"
+  "url": "$VER_URL",
+  "sha256": "$SHA256",
+  "subdir": "runtime"
 }
 JSON
 
-# Mirror to OUTDIR for inspection/CI
-cp -f "${MANIFEST_SRC}" "${MANIFEST_DST}"
-
-# Convenience: copy to device Downloads (optional)
-if [[ -d /sdcard/Download ]]; then
-  cp -f "${ZIP}" "/sdcard/Download/$(basename "${ZIP}")"
-  echo "[runtime] copied to /sdcard/Download/$(basename "${ZIP}")"
-fi
+echo "[done] manifest -> $MANIFEST"

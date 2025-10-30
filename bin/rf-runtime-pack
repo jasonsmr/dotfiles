@@ -1,0 +1,2 @@
+#!/usr/bin/env bash
+exec "$HOME/bin/rf_runtime_local_pack.sh" "$@"
