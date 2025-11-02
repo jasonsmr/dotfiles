@@ -1,19 +1,8 @@
-#!/system/bin/sh
-# rf-aapt2 — aarch64 shim that launches the real SDK aapt2 and disables the daemon
+#!/data/data/com.termux/files/usr/bin/env bash
+set -euo pipefail
 
-set -eu
+# Point to the SDK aapt2 we trust (your build.gradle already enforces this path)
+REAL="${ANDROID_AAPT2_REAL:-$HOME/opt/android-sdk/build-tools/34.0.4/aapt2}"
 
-REAL="${RF_AAPT2_REAL:-$HOME/opt/android-sdk/build-tools/34.0.4/aapt2}"
-[ -x "$REAL" ] || { echo "rf-aapt2: REAL aapt2 not found: $REAL" >&2; exit 127; }
-
-# Hard block the daemon anywhere it might be toggled
-export ANDROID_AAPT2_USE_DAEMON=false
-export ANDROID_DISABLE_RES_MERGE_DAEMON=true
-
-# Optional banner
-if [ "${RF_AAPT2_VERBOSE:-0}" != "0" ]; then
-  echo "[rf-aapt2] exec: $REAL $*" >&2
-fi
-
-# Some AGP calls use '@args' files; pass through as-is.
+# Exec directly; Gradle props already disable daemon mode.
 exec "$REAL" "$@"

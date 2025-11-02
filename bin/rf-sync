@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+APP="$HOME/android/RobotForest"
+RUNTIME="$HOME/android/robotforest-wow64-runtime"
+
+echo "[rf-sync] runtime: $RUNTIME"
+(
+  cd "$RUNTIME"
+  git fetch origin --prune
+  git checkout -B main
+  if ! git diff --quiet; then
+    echo "[rf-sync] NOTE: uncommitted changes in runtime working tree."
+  fi
+  if ! git diff --quiet --cached; then
+    git commit -m "chore(runtime): update" || true
+  fi
+  git push -u origin main
+)
+
+echo "[rf-sync] app: $APP"
+(
+  cd "$APP"
+  git fetch origin --prune
+  git checkout main
+  git pull --rebase origin main
+  git push origin main
+
+  git checkout -B robotforest-wow64-runtime
+  git submodule update --remote scripts/robotforest-wow64-runtime
+  git add scripts/robotforest-wow64-runtime
+  if ! git diff --quiet --cached; then
+    git commit -m "chore: bump runtime submodule"
+  fi
+  git push -u origin robotforest-wow64-runtime
+)
+
+echo "[rf-sync] done."
