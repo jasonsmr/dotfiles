@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+
 APP="$HOME/android/RobotForest"
 RUNTIME="$HOME/android/robotforest-wow64-runtime"
 
@@ -33,4 +34,5 @@ echo "[rf-sync] app: $APP"
   fi
   git push -u origin robotforest-wow64-runtime
 )
+
 echo "[rf-sync] done."
