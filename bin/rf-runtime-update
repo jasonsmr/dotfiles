@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -eux
+
+DEST="$HOME/.local/share/robotforest/runtime"
+
+mkdir -p "$DEST"
+"$HOME/bin/rf-runtime-get" \
+  --asset zip \
+  --dest "$DEST" \
+  "$@"
+
+echo "[rf] Runtime updated → $DEST"
