@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+BASE="/sdcard/Download"
+INBOX="$BASE/_INBOX"
+LOG="$BASE/_ARCHIVE/_MISC/sweepin_$(date +%Y-%m-%d).log"
+
+mkdir -p "$INBOX" "$(dirname "$LOG")"
+cd "$BASE"
+
+for f in *; do
+  [ -e "$f" ] || continue
+  case "$f" in
+    _*|BUILD) ;;
+    *)
+      echo "$(date +%F\ %T)  MOVE  $f -> _INBOX/" | tee -a "$LOG"
+      mv -n -- "$f" "$INBOX/" || true
+      ;;
+  esac
+done
+

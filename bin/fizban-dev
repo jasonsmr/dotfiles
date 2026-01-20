@@ -1,0 +1,12 @@
+#!/data/data/com.termux/files/usr/bin/env bash
+set -euo pipefail
+
+PY="${PYTHON:-python3}"
+SCRIPT="$HOME/fizban/cli/fizban_cli.py"
+
+if [[ ! -f "$SCRIPT" ]]; then
+  echo "fizban_cli.py not found at $SCRIPT" >&2
+  exit 1
+fi
+
+exec "$PY" "$SCRIPT" "$@"

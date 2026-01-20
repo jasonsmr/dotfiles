@@ -252,7 +252,7 @@ su - "$PROOT_USER" -c "startxfce4"
 EOF
 )
 
-  proot-distro login "$PROOT_DISTRO" --shared-tmp -- /bin/bash -lc "$inner_cmd" >>"$LOG_DIR/xfce4_proot.log" 2>&1 &
+  proot-distro login "$PROOT_DISTRO" --shared-tmp --user "$PROOT_USER" -- /bin/bash -lc "$inner_cmd" >>"$LOG_DIR/xfce4_proot.log" 2>&1 &
   log "[OK]   XFCE4 (proot/$PROOT_DISTRO) start invoked."
 }
 

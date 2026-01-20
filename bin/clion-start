@@ -31,7 +31,7 @@ else
 fi
 
 # 2) env preflight
-"$here/check-fizban-env.sh"
+"$here/verify_fizban_env.sh"
 
 # 3) enforce plugin disables (radler/rider/cwm)
 if command -v fix_clion_plugins.sh >/dev/null 2>&1; then

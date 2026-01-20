@@ -1,0 +1,13 @@
+#!/data/data/com.termux/files/usr/bin/bash
+set -euo pipefail
+
+MODE="${1:-${ENV_MODE:-}}"
+
+# If you renamed the old check script, prefer the new one automatically
+if [ -x "$HOME/bin/verify_fizban_env.sh" ]; then
+  "$HOME/bin/verify_fizban_env.sh" || true
+fi
+
+# Load env + launch
+exec "$HOME/bin/rider-env.sh" "${MODE:-}"
+

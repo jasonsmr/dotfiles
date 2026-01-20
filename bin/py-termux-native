@@ -1,0 +1,13 @@
+#!/data/data/com.termux/files/usr/bin/bash
+PREFIX=/data/data/com.termux/files/usr
+
+env -i \
+  HOME="$HOME" \
+  PREFIX="$PREFIX" \
+  PATH="$PREFIX/bin:$HOME/.local/bin:/system/bin" \
+  LD_LIBRARY_PATH="$PREFIX/lib" \
+  LANG="${LANG:-en_US.UTF-8}" \
+  TERM="${TERM:-xterm-256color}" \
+  TMPDIR="$PREFIX/tmp" \
+  PYTHONNOUSERSITE=1 \
+  python3 "$@"
