@@ -1,28 +1,19 @@
 #!/data/data/com.termux/files/usr/bin/bash
+# rider-termux — run Rider with Termux/X11 expectations
+
 set -euo pipefail
 
+mode="${1:-${ENV_MODE:-mingw-hybrid}}"
+shift || true
+
+# shellcheck disable=SC1090
+source "$HOME/bin/rider-env.sh" "$mode"
+
 RIDER_HOME="${RIDER_HOME:-$HOME/opt/jetbrains/rider}"
-if [ -L "$RIDER_HOME" ]; then
-  RIDER_HOME="$(readlink -f "$RIDER_HOME")"
+if [ -x "$RIDER_HOME/bin/rider.sh" ]; then
+  exec "$RIDER_HOME/bin/rider.sh" "$@"
 fi
 
-TERMUX_JDK="${RIDER_JDK:-$PREFIX/lib/jvm/java-21-openjdk}"
-
-# Keep accel (don’t set LIBGL_ALWAYS_SOFTWARE=1)
-export __GLX_VENDOR_LIBRARY_NAME="${__GLX_VENDOR_LIBRARY_NAME:-mesa}"
-
-# Optional: if you maintain JNA dirs like you did for CLion, wire them here:
-# export JNA_DIR="$RIDER_HOME/lib/jna/aarch64"
-# export LD_LIBRARY_PATH="$JNA_DIR:${LD_LIBRARY_PATH:-}"
-
-# If you keep your cross toolchains under ~/opt, preserve them:
-export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-$HOME/opt/mingw/lib:$HOME/opt/toolchain/aarch64-linux-android/lib}"
-
-# Force Rider launcher to use Termux JDK instead of bundled JBR
-export RIDER_JDK="$TERMUX_JDK"
-export JAVA_HOME="$TERMUX_JDK"
-export PATH="$JAVA_HOME/bin:$PATH"
-
-# Use the vendor script, but with our overrides
-exec "$RIDER_HOME/bin/rider.sh" "$@"
-
+latest="$(ls -1d "$HOME/opt/jetbrains"/rider-* 2>/dev/null | sort | tail -n 1 || true)"
+[ -n "$latest" ] || die "Rider not found under $HOME/opt/jetbrains (expected rider-* dirs)"
+exec "$latest/bin/rider.sh" "$@"

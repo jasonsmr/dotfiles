@@ -1,19 +1,31 @@
 #!/data/data/com.termux/files/usr/bin/bash
-# ---- toolchain/termux prelude ----
-if [ -z "$__TOOLCHAIN_PRELUDE" ]; then
-  __TOOLCHAIN_PRELUDE=1
-  : ${TMP:="$HOME$TMP"}; mkdir -p -- "$TMP"
-  # minimal PATH glue (keep short, user can extend in ~/.zshrc)
-  if [ -d "$HOME/opt/toolchain/aarch64-linux-android/bin" ]; then
-    case ":$PATH:" in *":$HOME/opt/toolchain/aarch64-linux-android/bin:"*) ;; 
-      *) PATH="$HOME/opt/toolchain/aarch64-linux-android/bin:$PATH";;
-    esac
-  fi
-fi
-# ---- end prelude ----
+# clion-env.sh — shared environment bootstrap for CLion on Termux
 
-# ~/bin/clion-env.sh
-source "$HOME/.env_modes.sh" ndk-hybrid
-LOG="$HOME/.cache/JetBrains/CLion2025.1/log/idea.log"
-echo "[clion-env] MODE=${ENV_MODE:-unset}  log: $LOG"
-exec "$HOME/bin/clion-termux" "$@
+set -euo pipefail
+
+mode="${1:-${ENV_MODE:-mingw-hybrid}}"
+
+export TMP="${TMP:-$HOME/tmp}"
+export TMPDIR="${TMPDIR:-$TMP}"
+mkdir -p "$TMP" "$HOME/.cache" "$HOME/.config" || true
+
+# Authoritative env switching
+if [ -f "$HOME/.env_modes.sh" ]; then
+  # shellcheck disable=SC1090
+  source "$HOME/.env_modes.sh" "$mode"
+else
+  echo "[clion-env][WARN] Missing $HOME/.env_modes.sh (mode switch skipped)" >&2
+fi
+
+# JetBrains-native libs (bionic builds you add) can live here
+JB_NATIVE_LIBS="${JB_NATIVE_LIBS:-$HOME/opt/jetbrains/native-libs}"
+mkdir -p "$JB_NATIVE_LIBS" || true
+
+# Help JNA locate native deps like libe2p.so (and any other small helpers)
+export JNA_LIBRARY_PATH="${JNA_LIBRARY_PATH:-$JB_NATIVE_LIBS}"
+export LD_LIBRARY_PATH="$JB_NATIVE_LIBS${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+
+# Keep IDE runtime clean: prefer Termux user bins first
+export PATH="$HOME/bin:/data/data/com.termux/files/usr/bin:/system/bin"
+
+export ENV_MODE="$mode"

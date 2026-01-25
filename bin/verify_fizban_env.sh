@@ -2,7 +2,9 @@
 # ---- toolchain/termux prelude ----
 if [ -z "$__TOOLCHAIN_PRELUDE" ]; then
   __TOOLCHAIN_PRELUDE=1
-  : ${TMP:="$HOME$TMP"}; mkdir -p -- "$TMP"
+  : "${TMP:=$HOME/tmp}"
+  : "${TMPDIR:=$TMP}"
+  mkdir -p -- "$TMPDIR"
   # minimal PATH glue (keep short, user can extend in ~/.zshrc)
   if [ -d "$HOME/opt/toolchain/aarch64-linux-android/bin" ]; then
     case ":$PATH:" in *":$HOME/opt/toolchain/aarch64-linux-android/bin:"*) ;; 
@@ -165,6 +167,9 @@ case "${ENV_MODE:-unset}" in
     else
       ok "Cross mode pkg-config clean"
     fi
+    ;;
+  mingw-hybrid)
+    ok "ENV_MODE=mingw-hybrid"
     ;;
   termux-native|sdk-tools|unset)
     ok "ENV_MODE=${ENV_MODE:-unset}"

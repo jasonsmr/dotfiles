@@ -1,13 +1,19 @@
 #!/data/data/com.termux/files/usr/bin/bash
+# rider-start — Termux launcher for JetBrains Rider (env-mode aware)
+#
+# Usage:
+#   rider-start [ENV_MODE] [--] [Rider args...]
+
 set -euo pipefail
 
-MODE="${1:-${ENV_MODE:-}}"
+die() { echo "[rider-start][FATAL] $*" >&2; exit 1; }
 
-# If you renamed the old check script, prefer the new one automatically
-if [ -x "$HOME/bin/verify_fizban_env.sh" ]; then
-  "$HOME/bin/verify_fizban_env.sh" || true
+mode="${ENV_MODE:-mingw-hybrid}"
+if [ "${1-}" != "" ] && [ "${1#-}" = "$1" ] && [ "$1" != "--" ]; then
+  mode="$1"; shift || true
+fi
+if [ "${1-}" = "--" ]; then
+  shift || true
 fi
 
-# Load env + launch
-exec "$HOME/bin/rider-env.sh" "${MODE:-}"
-
+exec "$HOME/bin/rider-termux" "$mode" "$@"

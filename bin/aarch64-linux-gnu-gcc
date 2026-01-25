@@ -1,0 +1,7 @@
+#!/data/data/com.termux/files/usr/bin/env bash
+set -euo pipefail
+GNU_PREFIX="${GNU_PREFIX:-$HOME/opt/gnu}"
+unset LD_PRELOAD
+export TERMUX_EXEC__DISABLE=1
+export LD_LIBRARY_PATH="$GNU_PREFIX/lib"
+exec "$GNU_PREFIX/bin/aarch64-linux-gnu-gcc" "$@"

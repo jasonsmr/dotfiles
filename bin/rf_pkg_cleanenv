@@ -1,0 +1,23 @@
+#!/data/data/com.termux/files/usr/bin/env bash
+set -euo pipefail
+PREFIX="/data/data/com.termux/files/usr"
+
+# Minimal native PATH only (prevents mingw wrappers from hijacking builds)
+export PATH="$PREFIX/bin:/system/bin"
+
+# Strip cross/toolchain variables that poison native builds
+unset CC CXX CPP AR AS LD NM OBJCOPY OBJDUMP RANLIB READELF STRIP
+unset CFLAGS CXXFLAGS CPPFLAGS LDFLAGS
+unset PKG_CONFIG PKG_CONFIG_PATH PKG_CONFIG_LIBDIR PKG_CONFIG_SYSROOT_DIR
+unset CPATH C_INCLUDE_PATH CPLUS_INCLUDE_PATH LIBRARY_PATH
+
+# Allow shell builtins like: command, type, hash
+case "${1:-}" in
+  command|type|hash)
+    shift || true
+    exec bash -lc "$0 ${*:-}"
+    ;;
+esac
+
+exec "$@"
+

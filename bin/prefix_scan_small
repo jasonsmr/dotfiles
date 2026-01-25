@@ -1,0 +1,118 @@
+#!/data/data/com.termux/files/usr/bin/env bash
+# prefix_scan_small — quick origin/ELF sanity scan for a directory tree
+# Usage:
+#   prefix_scan_small /data/data/com.termux/files/usr/bin
+# Output: CSV to stdout
+#
+# Notes:
+# - Safe to pipe to head; we silence BrokenPipe errors.
+# - "origin_guess" is heuristic (termux-bionic / termux-prefix / ndk-prebuilt / unknown)
+
+set -euo pipefail
+
+ROOT="${1:-}"
+if [ -z "$ROOT" ] || [ ! -e "$ROOT" ]; then
+  echo "usage: $0 <dir>" >&2
+  exit 2
+fi
+
+# If piped into head, avoid crashing the whole script
+trap 'exit 0' PIPE
+
+# Prefer Termux tools if present
+FILE_BIN="${FILE_BIN:-/data/data/com.termux/files/usr/bin/file}"
+READELF_BIN="${READELF_BIN:-/data/data/com.termux/files/usr/bin/readelf}"
+SHA256_BIN="${SHA256_BIN:-/data/data/com.termux/files/usr/bin/sha256sum}"
+
+csv_escape() {
+  # minimal CSV escaping: wrap in quotes if needed, double existing quotes
+  local s="$1"
+  if [[ "$s" == *['",\n']* ]]; then
+    s="${s//\"/\"\"}"
+    printf '"%s"' "$s"
+  else
+    printf '%s' "$s"
+  fi
+}
+
+is_elf() {
+  # fast check
+  head -c 4 "$1" 2>/dev/null | od -An -t x1 2>/dev/null | tr -d ' \n' | grep -qi '^7f454c46$'
+}
+
+interp_of() {
+  # prints interpreter path or empty
+  "$READELF_BIN" -l "$1" 2>/dev/null | awk '
+    /Requesting program interpreter/ {
+      gsub(/\[|\]/,"",$NF); print $NF
+    }'
+}
+
+needed_of() {
+  # prints NEEDED libs ; separated
+  "$READELF_BIN" -d "$1" 2>/dev/null | awk '
+    /NEEDED/ {
+      gsub(/\[|\]/,"",$NF);
+      if (out=="") out=$NF; else out=out ";" $NF
+    }
+    END{print out}'
+}
+
+sha12_of() {
+  "$SHA256_BIN" "$1" 2>/dev/null | awk '{print substr($1,1,12)}'
+}
+
+origin_guess() {
+  local p="$1" t="$2" i="$3"
+  # crude but effective
+  if [[ "$p" == /data/data/com.termux/files/usr/* ]]; then
+    if [[ "$t" == *"ASCII text"* ]] || [[ "$t" == *"symbolic link"* ]]; then
+      echo "termux-prefix"
+      return
+    fi
+    if [[ "$i" == "/system/bin/linker64" ]] || [[ "$t" == *"for Android"* ]]; then
+      echo "termux-bionic"
+      return
+    fi
+  fi
+  if [[ "$p" == *"/android-sdk/ndk/"*"/toolchains/llvm/"* ]]; then
+    echo "ndk-prebuilt"
+    return
+  fi
+  echo "unknown"
+}
+
+echo "path,type,interp,needed,sha256_12,origin_guess"
+
+# Walk files (follow symlinks as paths, but don't deref for hashing/type)
+# Use -print0 to survive weird filenames.
+while IFS= read -r -d '' f; do
+  # Skip huge files to keep it "small"
+  sz=$(stat -c '%s' "$f" 2>/dev/null || echo 0)
+  if [ "$sz" -gt 30000000 ]; then
+    continue
+  fi
+
+  t=$("$FILE_BIN" -b "$f" 2>/dev/null || echo "unknown")
+  interp=""
+  needed=""
+
+  if is_elf "$f"; then
+    interp="$(interp_of "$f" || true)"
+    needed="$(needed_of "$f" || true)"
+  fi
+
+  sha="$(sha12_of "$f" || true)"
+  og="$(origin_guess "$f" "$t" "$interp")"
+
+  {
+    csv_escape "$f"; echo -n ","
+    csv_escape "$t"; echo -n ","
+    csv_escape "$interp"; echo -n ","
+    csv_escape "$needed"; echo -n ","
+    csv_escape "$sha"; echo -n ","
+    csv_escape "$og"
+    echo
+  } || exit 0
+
+done < <(find "$ROOT" -type f -o -type l -print0 2>/dev/null)

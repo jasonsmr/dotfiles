@@ -1,0 +1,22 @@
+#!/data/data/com.termux/files/usr/bin/env bash
+set -euo pipefail
+
+SYSROOT="${SYSROOT:-$HOME/opt/gnu-sysroot}"
+WORKDIR="${WORKDIR:-$HOME/tmp}"
+
+# Stop Termux injectors from leaking in
+unset LD_PRELOAD
+unset LD_LIBRARY_PATH
+export TERMUX_EXEC__DISABLE=1
+
+mkdir -p "$WORKDIR"
+
+exec proot \
+  -r "$SYSROOT" \
+  -b /dev -b /proc -b /sys \
+  -b "$WORKDIR":/work \
+  -w /work \
+  /usr/lib/ld-linux-aarch64.so.1 \
+    --inhibit-cache \
+    --library-path /lib:/usr/lib \
+    "$@"

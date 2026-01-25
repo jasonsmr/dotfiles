@@ -1,0 +1,24 @@
+#!/data/data/com.termux/files/usr/bin/env bash
+set -euo pipefail
+
+echo "MODE=${FIZBAN_MODE:-unknown}"
+echo
+echo "PATH (top 20):"
+python - <<'PY'
+import os
+p=os.environ.get("PATH","").split(":")
+for i,x in enumerate(p[:20],1):
+    print(f"{i:02d} {x}")
+PY
+
+echo
+echo "Tool resolution:"
+for t in \
+  x86_64-w64-mingw32-gcc i686-w64-mingw32-gcc \
+  aarch64-linux-android-gcc clang gcc; do
+  echo "== $t"
+  command -v "$t" || true
+  type -a "$t" 2>/dev/null || true
+  echo
+done
+
