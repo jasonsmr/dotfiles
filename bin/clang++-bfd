@@ -1,0 +1,22 @@
+#!/data/data/com.termux/files/usr/bin/env bash
+set -euo pipefail
+
+NDKROOT="$HOME/opt/android-sdk/ndk/latest"
+PREBUILT_BASE="$NDKROOT/toolchains/llvm/prebuilt"
+
+case "$(uname -m)" in
+  aarch64|arm64) PREFERRED="linux-aarch64" ;;
+  x86_64)        PREFERRED="linux-x86_64" ;;
+  *)             PREFERRED="" ;;
+esac
+
+if [ -n "$PREFERRED" ] && [ -d "$PREBUILT_BASE/$PREFERRED" ]; then
+  LLVM_PREBUILT="$PREBUILT_BASE/$PREFERRED"
+else
+  LLVM_PREBUILT="$(find "$PREBUILT_BASE" -maxdepth 1 -type d -name 'linux-*' | head -n 1)"
+fi
+
+HOST_PREFIX="${HOST_PREFIX:-$HOME/opt/host-binutils}"
+export PATH="$HOST_PREFIX/bin:$LLVM_PREBUILT/bin:$PATH"
+
+exec "$LLVM_PREBUILT/bin/clang++" -fuse-ld=bfd "$@"
