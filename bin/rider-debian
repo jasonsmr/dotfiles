@@ -1,0 +1,55 @@
+#!/data/data/com.termux/files/usr/bin/bash
+# rider-debian — run JetBrains Rider inside proot Debian (from Termux)
+set -euo pipefail
+
+die(){ echo "[rider-debian][FATAL] $*" >&2; exit 1; }
+
+# 1) Prep Termux-side env / X11 access
+source "$HOME/bin/rider-debian-env.sh"
+
+# 2) Locate Rider install (shared Android filesystem)
+RIDER_HOME="${RIDER_HOME:-$HOME/opt/jetbrains/rider}"
+if [ ! -x "$RIDER_HOME/bin/rider.sh" ]; then
+  latest="$(ls -1d "$HOME/opt/jetbrains"/rider-* 2>/dev/null | sort | tail -n 1 || true)"
+  [ -n "$latest" ] || die "Rider not found under $HOME/opt/jetbrains (expected rider-* dirs)"
+  RIDER_HOME="$latest"
+fi
+
+DEBIAN_USER="${DEBIAN_USER:-droidmaster}"
+DEBIAN_DISTRO="${DEBIAN_DISTRO:-debian}"
+
+# 3) Run inside Debian with shared tmp so X11 socket is visible at /tmp/.X11-unix/X0
+exec proot-distro login "$DEBIAN_DISTRO" \
+  --user "$DEBIAN_USER" \
+  --shared-tmp \
+  -- bash -lc "
+    set -euo pipefail
+
+    export DISPLAY='${DISPLAY}'
+    export XDG_RUNTIME_DIR=/tmp/xdg-runtime-${DEBIAN_USER}
+
+    mkdir -p \"\$XDG_RUNTIME_DIR\" || true
+
+    # --- HARD FIX: stop Android from OOM-killing Rider backend ---
+    # Cap .NET backend memory so CoreCLR doesn't explode then get SIGKILL(137)
+    export DOTNET_GCConserveMemory=1
+    export DOTNET_GCHeapHardLimitPercent=\${DOTNET_GCHeapHardLimitPercent:-55}
+
+    # Optional: reduce extra background diagnostics memory churn
+    export DOTNET_EnableDiagnostics=0
+
+    # --- Reduce JVM heap (JetBrains front-end) to leave room for backend ---
+    export IDEA_VM_OPTIONS=\$HOME/.config/JetBrains/Rider2025.3/rider.vmoptions
+    mkdir -p \"\$(dirname \"\$IDEA_VM_OPTIONS\")\"
+    if [ ! -f \"\$IDEA_VM_OPTIONS\" ]; then
+      cat > \"\$IDEA_VM_OPTIONS\" <<'EOF'
+-Xms256m
+-Xmx768m
+-XX:ReservedCodeCacheSize=256m
+-XX:+UseG1GC
+EOF
+    fi
+
+    exec '${RIDER_HOME}/bin/rider.sh' \"\$@\"
+  " bash "$@"
+

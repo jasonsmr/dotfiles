@@ -1,19 +1,19 @@
 #!/data/data/com.termux/files/usr/bin/bash
-# rider-start — Termux launcher for JetBrains Rider (env-mode aware)
-#
-# Usage:
-#   rider-start [ENV_MODE] [--] [Rider args...]
-
+# rider-start — unified launcher
+# Usage: rider-start [ENV_MODE] [--] [args...]
 set -euo pipefail
-
-die() { echo "[rider-start][FATAL] $*" >&2; exit 1; }
 
 mode="${ENV_MODE:-mingw-hybrid}"
 if [ "${1-}" != "" ] && [ "${1#-}" = "$1" ] && [ "$1" != "--" ]; then
   mode="$1"; shift || true
 fi
-if [ "${1-}" = "--" ]; then
-  shift || true
-fi
+if [ "${1-}" = "--" ]; then shift || true; fi
 
-exec "$HOME/bin/rider-termux" "$mode" "$@"
+case "$mode" in
+  debian-dev|debian-cev|debian|proot-debian|debian-xfce)
+    exec "$HOME/bin/rider-debian" "$@"
+    ;;
+  *)
+    exec "$HOME/bin/rider-termux" "$mode" "$@"
+    ;;
+esac

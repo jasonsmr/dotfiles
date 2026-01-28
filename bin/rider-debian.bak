@@ -1,0 +1,28 @@
+#!/data/data/com.termux/files/usr/bin/bash
+# rider-debian — run JetBrains Rider inside proot Debian (from Termux)
+set -euo pipefail
+
+die(){ echo "[rider-debian][FATAL] $*" >&2; exit 1; }
+
+# 1) Prep Termux-side env / X11 access
+source "$HOME/bin/rider-debian-env.sh"
+
+# 2) Locate Rider install (shared Android filesystem)
+RIDER_HOME="${RIDER_HOME:-$HOME/opt/jetbrains/rider}"
+if [ ! -x "$RIDER_HOME/bin/rider.sh" ]; then
+  latest="$(ls -1d "$HOME/opt/jetbrains"/rider-* 2>/dev/null | sort | tail -n 1 || true)"
+  [ -n "$latest" ] || die "Rider not found under $HOME/opt/jetbrains (expected rider-* dirs)"
+  RIDER_HOME="$latest"
+fi
+
+DEBIAN_USER="${DEBIAN_USER:-droidmaster}"
+DEBIAN_DISTRO="${DEBIAN_DISTRO:-debian}"
+
+# 3) Run inside Debian with shared tmp so X11 socket is visible at /tmp/.X11-unix/X0
+exec proot-distro login "$DEBIAN_DISTRO"   --user "$DEBIAN_USER"   --shared-tmp   -- bash -lc "
+    set -euo pipefail
+    export DISPLAY='${DISPLAY}'
+    export XDG_RUNTIME_DIR="/tmp/xdg-runtime-${DEBIAN_USER}"
+    mkdir -p "\$XDG_RUNTIME_DIR" || true
+    exec '${RIDER_HOME}/bin/rider.sh' "\$@"
+  " bash "$@"
